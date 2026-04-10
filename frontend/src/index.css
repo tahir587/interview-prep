@@ -1,0 +1,555 @@
+@import "tailwindcss";
+/* SIDEBAR */
+
+.app-layout{
+  display:flex;
+  min-height:100vh;
+}
+
+.sidebar{
+  width:230px;
+  background:#111827;
+  color:white;
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+}
+
+.logo{
+  margin-bottom:30px;
+}
+
+.nav-links{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.nav-links a{
+  text-decoration:none;
+  color:white;
+  padding:10px;
+  border-radius:6px;
+}
+
+.nav-links a:hover{
+  background:#1f2937;
+}
+
+.nav-links .active{
+  background:#2563eb;
+}
+
+.sidebar-bottom{
+  margin-top:auto;
+}
+
+.logout-btn{
+  margin-top:10px;
+  padding:8px;
+  background:#ef4444;
+  border:none;
+  color:white;
+  border-radius:6px;
+}
+
+.main-content{
+  flex:1;
+  padding:30px;
+  background:#f5f6fa;
+}
+
+.sidebar{
+  width:240px;
+  height:100vh;
+  background:#111827;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  padding:20px;
+}
+
+.sidebar-logo{
+  font-size:20px;
+  font-weight:bold;
+  margin-bottom:30px;
+}
+
+.sidebar-nav{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.nav-item{
+  padding:10px 12px;
+  border-radius:8px;
+  color:white;
+  text-decoration:none;
+  transition:0.2s;
+}
+
+.nav-item:hover{
+  background:#1f2937;
+}
+
+.nav-item.active{
+  background:#2563eb;
+}
+
+.sidebar-user{
+  margin-top:auto;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.avatar{
+  background:#2563eb;
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+}
+
+.logout-btn{
+  padding:8px;
+  border:none;
+  background:#ef4444;
+  color:white;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.admin-container{
+  padding:30px;
+}
+
+.admin-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:20px;
+  margin-top:20px;
+}
+
+.admin-card{
+  background:white;
+  padding:25px;
+  border-radius:10px;
+  text-decoration:none;
+  color:#111;
+  font-weight:500;
+  box-shadow:0 3px 8px rgba(0,0,0,0.1);
+  transition:0.2s;
+}
+
+.admin-card:hover{
+  transform:translateY(-3px);
+  box-shadow:0 8px 20px rgba(0,0,0,0.15);
+}
+/* ===== Layout ===== */
+
+.layout{
+  display:flex;
+  min-height:100vh;
+  background:#f5f7fb;
+}
+
+/* ===== Sidebar ===== */
+
+.sidebar{
+  width:240px;
+  background:#0f172a;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  padding:20px;
+}
+
+/* ===== Content ===== */
+
+.content-area{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+.page-content{
+  padding:30px;
+}
+
+/* ===== Responsive ===== */
+
+@media (max-width:900px){
+
+  .sidebar{
+    width:200px;
+  }
+
+  .page-content{
+    padding:20px;
+  }
+
+}
+
+.admin-page{
+  padding:30px;
+}
+
+.admin-table{
+  width:100%;
+  border-collapse:collapse;
+  margin-top:20px;
+  background:white;
+}
+
+.admin-table th,
+.admin-table td{
+  padding:12px;
+  border-bottom:1px solid #ddd;
+  text-align:left;
+}
+
+.admin-table th{
+  background:#f1f5f9;
+}
+
+.delete-btn{
+  background:#ef4444;
+  color:white;
+  border:none;
+  padding:6px 12px;
+  border-radius:5px;
+  cursor:pointer;
+}
+
+.delete-btn:hover{
+  background:#dc2626;
+}
+.admin-page{
+  padding:30px;
+}
+
+.admin-form{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  max-width:500px;
+}
+
+.admin-form input,
+.admin-form textarea,
+.admin-form select{
+  padding:10px;
+  border:1px solid #ccc;
+  border-radius:6px;
+}
+
+.admin-table{
+  width:100%;
+  border-collapse:collapse;
+}
+
+.admin-table th,
+.admin-table td{
+  padding:12px;
+  border-bottom:1px solid #ddd;
+}
+
+.delete-btn{
+  background:#ef4444;
+  color:white;
+  border:none;
+  padding:5px 10px;
+  margin-left:10px;
+  border-radius:5px;
+}
+
+/* ===== AI Avatar Speaking Animations ===== */
+
+/* Speaking pulse animation */
+@keyframes speaking-pulse {
+  0%, 100% { 
+    transform: scale(1); 
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  }
+  50% { 
+    transform: scale(1.02); 
+    box-shadow: 0 0 20px 10px rgba(255, 255, 255, 0.1);
+  }
+}
+
+.animate-speaking {
+  animation: speaking-pulse 0.8s ease-in-out infinite;
+}
+
+/* Mouth opening animation - lip sync */
+@keyframes mouth-open {
+  0%, 100% { 
+    height: 4px; 
+    width: 8px;
+  }
+  25% { 
+    height: 12px; 
+    width: 14px;
+  }
+  50% { 
+    height: 6px; 
+    width: 10px;
+  }
+  75% { 
+    height: 10px; 
+    width: 12px;
+  }
+}
+
+.animate-mouth-open {
+  animation: mouth-open 0.15s ease-in-out infinite;
+}
+
+/* Sound wave animations */
+@keyframes sound-wave-1 {
+  0%, 100% { 
+    height: 6px; 
+    opacity: 0.6;
+  }
+  50% { 
+    height: 20px; 
+    opacity: 1;
+  }
+}
+
+@keyframes sound-wave-2 {
+  0%, 100% { 
+    height: 8px; 
+    opacity: 0.5;
+  }
+  50% { 
+    height: 28px; 
+    opacity: 1;
+  }
+}
+
+@keyframes sound-wave-3 {
+  0%, 100% { 
+    height: 5px; 
+    opacity: 0.4;
+  }
+  50% { 
+    height: 16px; 
+    opacity: 0.8;
+  }
+}
+
+.animate-sound-wave-1 {
+  animation: sound-wave-1 0.4s ease-in-out infinite;
+}
+
+.animate-sound-wave-2 {
+  animation: sound-wave-2 0.35s ease-in-out infinite;
+}
+
+.animate-sound-wave-3 {
+  animation: sound-wave-3 0.45s ease-in-out infinite;
+}
+
+/* Floating particles */
+@keyframes float-1 {
+  0%, 100% { 
+    transform: translateY(0) translateX(0); 
+    opacity: 0.3;
+  }
+  50% { 
+    transform: translateY(-15px) translateX(5px); 
+    opacity: 0.6;
+  }
+}
+
+@keyframes float-2 {
+  0%, 100% { 
+    transform: translateY(0) translateX(0); 
+    opacity: 0.4;
+  }
+  50% { 
+    transform: translateY(-12px) translateX(-4px); 
+    opacity: 0.7;
+  }
+}
+
+@keyframes float-3 {
+  0%, 100% { 
+    transform: translateY(0) translateX(0); 
+    opacity: 0.2;
+  }
+  50% { 
+    transform: translateY(-18px) translateX(6px); 
+    opacity: 0.5;
+  }
+}
+
+.animate-float-1 {
+  animation: float-1 2s ease-in-out infinite;
+}
+
+.animate-float-2 {
+  animation: float-2 2.5s ease-in-out infinite;
+}
+
+.animate-float-3 {
+  animation: float-3 1.8s ease-in-out infinite;
+}
+
+/* ===== Enhanced AI Avatar Animations ===== */
+
+/* Head subtle movement - natural breathing */
+@keyframes head-bob {
+  0%, 100% { 
+    transform: translateY(0) rotate(0deg);
+  }
+  25% { 
+    transform: translateY(-3px) rotate(1deg);
+  }
+  50% { 
+    transform: translateY(-1px) rotate(0deg);
+  }
+  75% { 
+    transform: translateY(-2px) rotate(-1deg);
+  }
+}
+
+.animate-head-bob {
+  animation: head-bob 3s ease-in-out infinite;
+}
+
+/* Blinking eyes */
+@keyframes blink {
+  0%, 45%, 55%, 100% { 
+    transform: scaleY(1);
+  }
+  50% { 
+    transform: scaleY(0.1);
+  }
+}
+
+.animate-blink {
+  animation: blink 4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+/* Breathing indicator - subtle chest movement */
+@keyframes breathe {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% { 
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+/* Listening mode - pulsing glow */
+@keyframes listening-glow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+  }
+  50% { 
+    box-shadow: 0 0 40px rgba(99, 102, 241, 0.8);
+  }
+}
+
+.animate-listening {
+  animation: listening-glow 1.5s ease-in-out infinite;
+}
+
+/* Thinking mode - subtle shake */
+@keyframes thinking-shake {
+  0%, 100% { 
+    transform: rotate(0deg);
+  }
+  25% { 
+    transform: rotate(2deg);
+  }
+  75% { 
+    transform: rotate(-2deg);
+  }
+}
+
+.animate-thinking {
+  animation: thinking-shake 0.5s ease-in-out infinite;
+}
+
+/* Enhanced speaking - more natural lip sync */
+@keyframes speak-mouth {
+  0%, 100% { 
+    height: 4px; 
+    width: 10px;
+    border-radius: 50%;
+  }
+  15% { 
+    height: 14px; 
+    width: 16px;
+  }
+  30% { 
+    height: 6px; 
+    width: 12px;
+  }
+  45% { 
+    height: 12px; 
+    width: 18px;
+  }
+  60% { 
+    height: 8px; 
+    width: 14px;
+  }
+  75% { 
+    height: 10px; 
+    width: 15px;
+  }
+}
+
+.animate-speak-mouth {
+  animation: speak-mouth 0.2s ease-in-out infinite;
+}
+
+/* Smooth transition for expression changes */
+.expression-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Ripple effect when AI starts speaking */
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.animate-ripple {
+  animation: ripple 1s ease-out infinite;
+}
+
+/* Subtle floating for avatar */
+@keyframes avatar-float {
+  0%, 100% { 
+    transform: translateY(0);
+  }
+  50% { 
+    transform: translateY(-8px);
+  }
+}
+
+.animate-avatar-float {
+  animation: avatar-float 4s ease-in-out infinite;
+}
