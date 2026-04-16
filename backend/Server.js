@@ -19,16 +19,31 @@ const app = express();
 // Connect database
 connectDB();
 
+const localOrigins = ["http://localhost:5173", "http://localhost:5174"];
+const envOrigins = [
+  process.env.CLIENT_URL,
+  ...(process.env.CLIENT_URLS ? process.env.CLIENT_URLS.split(",") : []),
+]
+  .map((origin) => origin?.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...localOrigins, ...envOrigins])];
+
 
 // Middleware
-app.use(cors({
-  origin: [
-    process.env.CLIENT_URL || "http://localhost:5173",
-    "http://localhost:5173",
-    "http://localhost:5174",
-  ],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser clients and configured frontend origins.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
