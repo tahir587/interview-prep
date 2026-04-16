@@ -272,8 +272,10 @@ const InterviewSessionPage = () => {
   const [candidateResponse, setCandidateResponse] = useState("");
   const [candidateQAPrompt, setCandidateQAPrompt] = useState("");
   const [candidateQuestionsAsked, setCandidateQuestionsAsked] = useState(0);
+  const [remainingCandidateQuestions, setRemainingCandidateQuestions] = useState(3);
   const [closingMessage, setClosingMessage] = useState("");
   const [showResults, setShowResults] = useState(false);
+  const [pendingWarmUpGreeting, setPendingWarmUpGreeting] = useState("");
   const [timer, setTimer] = useState(0);
   const [listening, setListening] = useState(false);
   const [showQuestionCard, setShowQuestionCard] = useState(false);
@@ -614,8 +616,18 @@ const InterviewSessionPage = () => {
   const tryMic = () => { if (!aiSpeaking && !isProcessing && recognitionRef.current) recognitionRef.current.start(); };
 
   /* ── Phase handlers ── */
-  const handleLobbyComplete = async (data) => { await completeLobby(id, data); };
-  const handleJoinInterview = async () => { await joinInterview(id); setCurrentPhase("warmup"); speak("Hi there! How's your day going? Did you have far to travel?"); };
+  const handleLobbyComplete = async (data) => {
+    const res = await completeLobby(id, data);
+    if (res?.data?.greeting) {
+      setPendingWarmUpGreeting(res.data.greeting);
+    }
+  };
+
+  const handleJoinInterview = async () => {
+    await joinInterview(id);
+    setCurrentPhase("warmup");
+    speak(pendingWarmUpGreeting || "Hi there! Thanks for joining. How has your day been so far?");
+  };
 
   const handleWarmUpSubmit = async () => {
     if (!candidateResponse.trim() || isProcessing) return;
@@ -635,7 +647,7 @@ const InterviewSessionPage = () => {
     setIsProcessing(true);
     try {
       const res = await submitBackground(id, { userResponse: candidateResponse, questionIndex: backgroundCount });
-      setBackgroundCount(prev => prev + 1);
+      setBackgroundCount(Number.isFinite(res?.data?.nextBackgroundIndex) ? res.data.nextBackgroundIndex : backgroundCount + 1);
       speak(res.data.aiResponse, () => {
         if (res.data.shouldMoveToCore) setTimeout(() => setCurrentPhase("core-questions"), 1500);
         else if (res.data.nextBackgroundQuestion) setTimeout(() => speak(res.data.nextBackgroundQuestion), 500);
@@ -654,6 +666,18 @@ const InterviewSessionPage = () => {
       setInterviewerReaction(res.data.interviewerReaction);
       setShouldInterrupt(res.data.shouldInterrupt); setInterruptMessage(res.data.interruptMessage);
       setShowQuestionCard(true);
+      setInterview((prev) => {
+        if (!prev || !Array.isArray(prev.questions)) return prev;
+        const nextQuestions = [...prev.questions];
+        if (!nextQuestions[currentQ]) return prev;
+        nextQuestions[currentQ] = {
+          ...nextQuestions[currentQ],
+          score: res.data.score,
+          aiFeedback: res.data.feedback,
+          displayedAsCard: true,
+        };
+        return { ...prev, questions: nextQuestions };
+      });
       if (requestedNextQuestion) {
         setFollowUp(null);
         setFollowUpAsked(false);
@@ -691,30 +715,58 @@ const InterviewSessionPage = () => {
   };
 
   const startCandidateQAPhase = async () => {
-    try { const res = await startCandidateQA(id); setCandidateQAPrompt(res.data.prompt); setCurrentPhase("candidate-qa"); setTimeout(() => speak(res.data.prompt), 500); }
+    try {
+      const res = await startCandidateQA(id);
+      setCandidateQAPrompt(res.data.prompt);
+      setCandidateQuestionsAsked(0);
+      setRemainingCandidateQuestions(res.data.remainingQuestions ?? 3);
+      setCurrentPhase("candidate-qa");
+      setTimeout(() => speak(res.data.prompt), 500);
+    }
     catch (err) { console.error(err); }
   };
 
   const handleCandidateQuestionSubmit = async () => {
     if (!candidateResponse.trim() || isProcessing) return;
     setIsProcessing(true);
-    try { const res = await submitCandidateQuestion(id, { question: candidateResponse }); speak(res.data.answer); setCandidateQuestionsAsked(p => p + 1); setCandidateResponse(""); }
+    try {
+      const res = await submitCandidateQuestion(id, { question: candidateResponse });
+      speak(res.data.answer);
+      setCandidateQuestionsAsked((p) => p + 1);
+      setRemainingCandidateQuestions(res.data.remainingQuestions ?? Math.max(0, remainingCandidateQuestions - 1));
+      setCandidateResponse("");
+    }
     catch (err) { console.error(err); } finally { setIsProcessing(false); }
   };
 
   const finishCandidateQA = async () => {
-    try { const res = await startClosing(id); setClosingMessage(res.data.closingMessage); setCurrentPhase("closing"); speak(res.data.closingMessage); setTimeout(() => setShowResults(true), 4000); }
+    try {
+      const res = await startClosing(id);
+      setClosingMessage(res.data.closingMessage);
+      setCurrentPhase("closing");
+      speak(res.data.closingMessage, async () => {
+        try {
+          const completion = await completeInterview(id, { duration: timer });
+          if (completion?.data?.interview) {
+            setInterview(completion.data.interview);
+          }
+        } catch (err) {
+          console.error("Completion error:", err);
+        } finally {
+          setShowResults(true);
+        }
+      });
+    }
     catch (err) { console.error(err); }
   };
 
   const finishInterview = async () => {
-    try { await completeInterview(id, { duration: timer }); navigate("/interview"); }
-    catch (err) { console.error(err); }
+    navigate("/interview");
   };
 
   const getWarmUpMessage = () => {
     if (aiSpeaking || isProcessing) return null;
-    if (warmUpCount === 0) return "How's your day going? Did you have far to travel?";
+    if (warmUpCount === 0) return pendingWarmUpGreeting || "How's your day going?";
     if (warmUpCount === 1) return "That sounds nice. I'd love to hear more about your background.";
     return "Great! Let's get started with the interview.";
   };
@@ -737,7 +789,10 @@ const InterviewSessionPage = () => {
 
   /* ═══════════════════ RESULTS ═══════════════════ */
   if (showResults) {
-    const totalScore = interview.questions?.reduce((acc, q) => acc + (q.score || 0), 0) / (interview.questions?.length || 1) * 10;
+    const computedScore = interview.questions?.reduce((acc, q) => acc + (q.score || 0), 0) / (interview.questions?.length || 1) * 10;
+    const totalScore = interview?.status === "completed" && Number.isFinite(interview?.overallScore)
+      ? interview.overallScore
+      : computedScore;
     const grade = totalScore >= 80 ? "A" : totalScore >= 70 ? "B+" : totalScore >= 60 ? "B" : totalScore >= 50 ? "C" : "D";
     const gradeColor = totalScore >= 70 ? "#10b981" : totalScore >= 50 ? "#f59e0b" : "#f43f5e";
 
@@ -838,7 +893,7 @@ const InterviewSessionPage = () => {
           </div>
 
           {/* Candidate-QA special: done button */}
-          {currentPhase === "candidate-qa" && candidateQuestionsAsked >= 1 && (
+          {currentPhase === "candidate-qa" && (candidateQuestionsAsked >= 2 || remainingCandidateQuestions <= 0) && (
             <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
               <button onClick={finishCandidateQA}
                 style={{
@@ -856,7 +911,7 @@ const InterviewSessionPage = () => {
         <ResponseArea
           value={candidateResponse} onChange={e => setCandidateResponse(e.target.value)}
           onSubmit={handleSubmit} onMic={tryMic} listening={listening}
-          disabled={isProcessing} aiSpeaking={aiSpeaking}
+          disabled={isProcessing || (currentPhase === "candidate-qa" && remainingCandidateQuestions <= 0)} aiSpeaking={aiSpeaking}
           placeholder={currentPhase === "candidate-qa" ? "Ask about the role, team, tech stack…" : "Type your response…"}
           submitLabel={currentPhase === "candidate-qa" ? "Ask" : "Send"}
         />
@@ -1032,7 +1087,7 @@ const InterviewSessionPage = () => {
           </div>
         )}
 
-        {followUp && !feedback && (
+        {followUp && (
           <p style={{ fontSize: "0.82rem", color: "var(--c-muted)", padding: "0 4px" }}>Follow-up — answer above, then submit.</p>
         )}
 

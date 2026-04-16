@@ -43,7 +43,7 @@ const mockInterviewSchema = new Schema(
 
     title: { type: String, required: true },
 
-    interviewerName: { type: String, default: "Alex" },
+    interviewerName: { type: String, default: "Sophia" },
     interviewerRole: { type: String, default: "Senior Software Engineer" },
     company: { type: String, default: "General" },
 
@@ -92,6 +92,7 @@ const mockInterviewSchema = new Schema(
 
     // Candidate Q&A phase
     candidateQuestions: [candidateQASchema],
+    candidateQuestionsAskedCount: { type: Number, default: 0 },
 
     overallScore: { type: Number, min: 0, max: 100, default: 0 },
 

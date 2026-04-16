@@ -1,4 +1,4 @@
-import MockInterview from "../models/MockInterview.js";
+import MockInterview from "../models/Mockinterview.js";
 import Progress from "../models/Progress.js";
 
 import {
@@ -165,10 +165,25 @@ export const completeLobby = async (req, res) => {
 
     const { cameraWorking, micWorking, audioTestComplete } = req.body;
 
+    const cameraOk = cameraWorking === true;
+    const micOk = micWorking === true;
+    const audioOk = audioTestComplete === true;
+
+    if (!cameraOk || !micOk || !audioOk) {
+      return res.status(400).json({
+        message: "Please complete camera, microphone, and audio checks before joining.",
+        checks: {
+          cameraWorking: cameraOk,
+          micWorking: micOk,
+          audioTestComplete: audioOk,
+        },
+      });
+    }
+
     interview.lobbyData = {
-      cameraWorking: cameraWorking || true,
-      micWorking: micWorking || true,
-      audioTestComplete: audioTestComplete || true,
+      cameraWorking: cameraOk,
+      micWorking: micOk,
+      audioTestComplete: audioOk,
       techCheckComplete: true,
       interviewerJoined: false
     };
@@ -339,9 +354,14 @@ export const submitBackgroundResponse = async (req, res) => {
       followUpQuestion = result.followUpQuestion;
       shouldAskFollowUp = result.shouldAskFollowUp || false;
 
-      // Move to core questions after 1-2 background questions
-      const currentIndex = interview.backgroundConversation.filter(b => b.userResponse).length;
-      if (currentIndex >= 1) {
+      const answeredCountBeforeCurrent = interview.backgroundConversation.filter((b) => (b.userResponse || "").trim().length > 0).length;
+      const currentWasAlreadyAnswered = (bgQuestion?.userResponse || "").trim().length > 0;
+      const answeredCount = answeredCountBeforeCurrent + (currentWasAlreadyAnswered ? 0 : 1);
+      const minBackgroundExchanges = Math.min(2, Math.max(1, interview.backgroundConversation.length));
+      const atEndOfBackgroundQuestions = questionIndex >= interview.backgroundConversation.length - 1;
+
+      // Move to core only when we have enough signal (not immediately after first response).
+      if ((!shouldAskFollowUp && answeredCount >= minBackgroundExchanges) || atEndOfBackgroundQuestions) {
         shouldMoveToCore = true;
       }
     } catch (err) {
@@ -362,14 +382,24 @@ export const submitBackgroundResponse = async (req, res) => {
 
     await interview.save();
 
+    const nextBackgroundIndex = shouldMoveToCore
+      ? questionIndex + 1
+      : (shouldAskFollowUp && followUpQuestion ? questionIndex : questionIndex + 1);
+
+    const nextBackgroundQuestion = shouldMoveToCore
+      ? null
+      : (shouldAskFollowUp && followUpQuestion
+        ? followUpQuestion
+        : interview.backgroundConversation[questionIndex + 1]?.question || null);
+
     res.json({
       aiResponse,
       followUpQuestion,
       shouldAskFollowUp,
       shouldMoveToCore,
       nextPhase: shouldMoveToCore ? "core-questions" : "background",
-      nextBackgroundIndex: questionIndex + 1,
-      nextBackgroundQuestion: !shouldMoveToCore ? interview.backgroundConversation[questionIndex + 1]?.question : null
+      nextBackgroundIndex,
+      nextBackgroundQuestion
     });
 
   } catch (error) {
@@ -463,6 +493,10 @@ export const submitAnswer = async (req, res) => {
 
     const isLast = interview.questions.length - 1 === idx;
     const answerLength = answer.trim().split(/\s+/).length;
+    const existingAnswer = (q.userAnswer || "").trim();
+    const mergedAnswer = existingAnswer
+      ? `${existingAnswer}\n\nFollow-up:\n${answer}`
+      : answer;
 
     const normalizedAnswer = answer.toLowerCase();
     const userDoesntKnow =
@@ -500,7 +534,7 @@ export const submitAnswer = async (req, res) => {
       } else {
         const evaluation = await evaluateAnswer({
           question: q.question,
-          userAnswer: answer
+          userAnswer: mergedAnswer
         });
 
         if (typeof evaluation === 'object') {
@@ -585,7 +619,7 @@ export const submitAnswer = async (req, res) => {
       score = 5;
     }
 
-    q.userAnswer = answer;
+    q.userAnswer = mergedAnswer;
     q.aiFeedback = typeof feedback === 'object' ? JSON.stringify(feedback) : feedback;
     q.score = score;
 
@@ -645,6 +679,7 @@ export const startCandidateQA = async (req, res) => {
     });
 
     interview.candidateQuestions = candidateQA;
+    interview.candidateQuestionsAskedCount = 0;
     interview.currentPhase = "candidate-qa";
     interview.phaseTimestamps.candidateQAStarted = new Date();
 
@@ -653,7 +688,8 @@ export const startCandidateQA = async (req, res) => {
     res.json({
       message: "Candidate Q&A phase started",
       prompt: "Before I let you go — do you have any questions for me about the role or the team?",
-      prebakedQA: candidateQA
+      prebakedQA: candidateQA,
+      remainingQuestions: 3
     });
 
   } catch (error) {
@@ -680,24 +716,56 @@ export const submitCandidateQuestion = async (req, res) => {
 
     const { question } = req.body;
 
+    const MAX_CANDIDATE_QUESTIONS = 3;
+    const askedCount = interview.candidateQuestionsAskedCount || 0;
+    if (askedCount >= MAX_CANDIDATE_QUESTIONS) {
+      return res.status(400).json({
+        message: "Candidate Q&A limit reached",
+        remainingQuestions: 0,
+        canContinue: false,
+      });
+    }
+
     // Find matching pre-baked answer or generate one
     let aiAnswer = "";
-    
-    // Try to find a matching question
-    const matched = interview.candidateQuestions.find(
-      q => q.question.toLowerCase().includes(question.toLowerCase().split(' ').slice(0, 3).join(' '))
-    );
+
+    const normalize = (value = "") =>
+      value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const incoming = normalize(question);
+    const incomingTokens = incoming.split(" ").filter((t) => t.length > 2);
+
+    let matched = null;
+    let bestScore = 0;
+    for (const item of interview.candidateQuestions) {
+      const candidate = normalize(item.question);
+      const candidateTokens = new Set(candidate.split(" ").filter((t) => t.length > 2));
+      const overlap = incomingTokens.reduce((count, token) => count + (candidateTokens.has(token) ? 1 : 0), 0);
+      if (overlap > bestScore) {
+        bestScore = overlap;
+        matched = item;
+      }
+    }
 
     if (matched) {
       aiAnswer = matched.aiAnswer;
     } else {
-      // Generate a generic but realistic answer
-      aiAnswer = "That's a great question. I'd be happy to tell you more about that. Generally speaking, we focus on...";
+      aiAnswer = `Great question. For this ${interview.interviewerRole} role at ${interview.company}, we'd evaluate impact, ownership, and collaboration. Happy to share specifics based on what matters most to you.`;
     }
+
+    interview.candidateQuestionsAskedCount = askedCount + 1;
+    await interview.save();
+
+    const remainingQuestions = Math.max(0, MAX_CANDIDATE_QUESTIONS - interview.candidateQuestionsAskedCount);
 
     res.json({
       answer: aiAnswer,
-      remainingQuestions: 2 // Allow 2-3 questions
+      remainingQuestions,
+      canContinue: remainingQuestions > 0
     });
 
   } catch (error) {

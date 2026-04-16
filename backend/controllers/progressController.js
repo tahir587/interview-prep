@@ -1,6 +1,6 @@
 import Progress from "../models/Progress.js";
 import Problem from "../models/Problem.js";
-import MockInterview from "../models/MockInterview.js";
+import MockInterview from "../models/Mockinterview.js";
 
 // @desc   Get user progress dashboard data
 // @route  GET /api/progress

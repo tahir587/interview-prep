@@ -229,7 +229,7 @@ const InterviewLobby = ({ interview, onComplete, onJoin }) => {
                   animation: "breathe 3s ease-in-out infinite",
                 }}>{interview?.interviewerName?.[0] || "A"}</div>
                 <div>
-                  <p style={{ fontWeight: 700, fontSize: "0.92rem", color: "#e8edf5" }}>{interview?.interviewerName || "Alex"}</p>
+                  <p style={{ fontWeight: 700, fontSize: "0.92rem", color: "#e8edf5" }}>{interview?.interviewerName || "Sophia"}</p>
                   <p style={{ fontSize: "0.78rem", color: "var(--c-muted)" }}>{interview?.interviewerRole || "Senior Software Engineer"}</p>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
