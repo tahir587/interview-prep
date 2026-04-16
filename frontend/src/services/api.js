@@ -5,7 +5,7 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
+  const token = sessionStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -15,9 +15,10 @@ API.interceptors.request.use((config) => {
 API.interceptors.response.use(
   (response) => response,
   (error) => {
-    const token = localStorage.getItem("token");
+    const token = sessionStorage.getItem("token");
     const isLoginPage = window.location.pathname === "/login";
     if (error.response?.status === 401 && token && !isLoginPage) {
+      sessionStorage.removeItem("token");
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
@@ -45,6 +46,7 @@ export const getInterviews = () => API.get("/interview");
 export const getInterview = (id) => API.get(`/interview/${id}`);
 export const submitAnswer = (id, qIdx, data) => API.put(`/interview/${id}/answer/${qIdx}`, data);
 export const completeInterview = (id, data) => API.put(`/interview/${id}/complete`, data);
+export const synthesizeInterviewSpeech = (data) => API.post("/interview/tts", data, { responseType: "arraybuffer" });
 
 // Phase management
 export const getCurrentPhase = (id) => API.get(`/interview/${id}/phase`);

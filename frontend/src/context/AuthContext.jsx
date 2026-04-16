@@ -10,12 +10,24 @@ export const AuthProvider = ({ children }) => {
   // Check user when app loads
   useEffect(() => {
     const checkAuth = async () => {
-      // Clear any existing token to force logout on every page load
+      const token = sessionStorage.getItem("token");
+
+      // Remove legacy persisted token so app does not auto-login from previous localStorage state.
       localStorage.removeItem("token");
-      
-      // Don't auto-login - require login every time
+
+      // If token exists, try to get user info
+      if (token) {
+        try {
+          const res = await api.getMe();
+          setUser(res.data);
+        } catch (error) {
+          console.error("Auth check failed:", error);
+          sessionStorage.removeItem("token");
+          setUser(null);
+        }
+      }
+
       setLoading(false);
-      return;
     };
 
     checkAuth();
@@ -26,7 +38,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.register(data);
 
-      localStorage.setItem("token", res.data.token);
+      sessionStorage.setItem("token", res.data.token);
 
       setUser(res.data.user);
 
@@ -37,25 +49,25 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Login
+  const login = async (data) => {
+    try {
+      const res = await api.login(data);
 
+      sessionStorage.setItem("token", res.data.token);
 
-const login = async (data) => {
-  try {
-    const res = await api.login(data);
+      // Ensure we have the complete user object with role
+      const userData = res.data.user;
+      setUser(userData);
 
-    localStorage.setItem("token", res.data.token);
-    setUser(res.data.user);
-
-    return res.data;
-
-  } catch (error) {
-
-    throw error;
-  }
-};
+      return res.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
+  };
 
   // Logout
   const logout = () => {
+    sessionStorage.removeItem("token");
     localStorage.removeItem("token");
 
     setUser(null);

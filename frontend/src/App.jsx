@@ -61,13 +61,13 @@ const PublicRoute = ({ children }) => {
 // ───────────── Layout ─────────────
 const AppLayout = ({ children }) => {
   return (
-    <div className="layout">
+    <div className="layout" style={{ background: "var(--c-bg, #07080f)", minHeight: "100vh" }}>
       {/* Sidebar */}
       <Navbar />
 
       {/* Main Content */}
       <div className="content-area">
-        <main className="page-content">{children}</main>
+        <main className="page-content" style={{ background: "transparent" }}>{children}</main>
       </div>
     </div>
   );
@@ -110,7 +110,7 @@ const App = () => {
 
           <Route
             path="/"
-            element={<HomePage />}
+            element={<Navigate to="/login" replace />}
           />
 
           {/* Authenticated Home Route */}

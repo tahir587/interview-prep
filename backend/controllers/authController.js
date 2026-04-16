@@ -8,21 +8,52 @@ const generateToken = (id) =>
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
+// Helper function to validate email format
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 // @desc   Register user
 // @route  POST /api/auth/register
 export const register = async (req, res) => {
   try {
     const { name, email, password, targetCompanies } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    // Input validation
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "Please provide name, email, and password",
+      });
+    }
+
+    if (name.trim().length < 2) {
+      return res.status(400).json({
+        message: "Name must be at least 2 characters long",
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        message: "Please provide a valid email address",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters long",
+      });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser)
       return res
         .status(400)
         .json({ message: "User already exists with this email" });
 
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase(),
       password,
       targetCompanies: targetCompanies || [],
     });
@@ -50,6 +81,7 @@ export const register = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         targetCompanies: user.targetCompanies,
       },
     });
@@ -65,9 +97,24 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Input validation
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide email and password",
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid email address",
+      });
+    }
+
     console.log("Login attempt for:", email);
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     console.log("User found:", !!user);
 
     if (!user) {
@@ -99,6 +146,7 @@ export const login = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         targetCompanies: user.targetCompanies,
       },
     });

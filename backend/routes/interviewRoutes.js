@@ -14,7 +14,9 @@ import {
   startCandidateQA,
   submitCandidateQuestion,
   startClosing,
-  getCurrentPhase
+  getCurrentPhase,
+  getAdaptiveQuestion,
+  synthesizeInterviewSpeech
 } from "../controllers/interviewController.js";
 
 import { protect } from "../middleware/authMiddleware.js";
@@ -26,6 +28,9 @@ router.post("/start", protect, startInterview);
 router.get("/", protect, getInterviews);
 router.get("/:id", protect, getInterview);
 router.get("/:id/phase", protect, getCurrentPhase);
+
+// Interview voice synthesis
+router.post("/tts", protect, synthesizeInterviewSpeech);
 
 // Lobby phase
 router.post("/:id/lobby", protect, completeLobby);
@@ -39,6 +44,7 @@ router.post("/:id/background", protect, submitBackgroundResponse);
 
 // Core questions (existing)
 router.put("/:id/answer/:questionIndex", protect, submitAnswer);
+router.post("/:id/adaptive/:questionIndex", protect, getAdaptiveQuestion);
 
 // Candidate Q&A phase
 router.post("/:id/candidate-qa/start", protect, startCandidateQA);

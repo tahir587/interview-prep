@@ -11,25 +11,32 @@ import {
   generateBackgroundQuestions,
   generateBackgroundResponse,
   generateCandidateQAAnswers,
-  generateClosingMessage
+  generateClosingMessage,
+  generateProbeFollowUp,
+  generateInterrupterResponse,
+  generateAdaptiveQuestion,
+  generateInterviewerReaction
 } from "../services/aiService.js";
 
 // @desc   Start a new mock interview
 // @route  POST /api/interview/start
 export const startInterview = async (req, res) => {
   try {
-    const { type, company, difficulty, questionCount = 5 } = req.body;
+    const { type, company, difficulty, questionCount = 5, resumeText = "" } = req.body;
 
     if (!type || !difficulty) {
       return res.status(400).json({ message: "Type and difficulty are required" });
     }
+
+    const normalizedResume = typeof resumeText === "string" ? resumeText.trim() : "";
 
     // Generate questions for core interview
     const aiQuestions = await generateQuestions({
       type,
       company,
       difficulty,
-      count: questionCount
+      count: questionCount,
+      resumeText: normalizedResume
     });
 
     const questions = aiQuestions.map((q) => ({
@@ -41,6 +48,23 @@ export const startInterview = async (req, res) => {
       displayedAsCard: false
     }));
 
+    let backgroundConversation = [];
+    try {
+      const bgQuestions = await generateBackgroundQuestions(normalizedResume);
+      backgroundConversation = (Array.isArray(bgQuestions) ? bgQuestions : []).map((q) => ({
+        question: q.question,
+        userResponse: "",
+        aiResponse: ""
+      }));
+    } catch (err) {
+      const fallbackBgQuestions = await generateBackgroundQuestions();
+      backgroundConversation = (Array.isArray(fallbackBgQuestions) ? fallbackBgQuestions : []).map((q) => ({
+        question: q.question,
+        userResponse: "",
+        aiResponse: ""
+      }));
+    }
+
     const interview = await MockInterview.create({
       user: req.user._id,
       title: `${company || "General"} ${type} Interview`,
@@ -48,6 +72,7 @@ export const startInterview = async (req, res) => {
       company: company || "General",
       difficulty,
       questions,
+      backgroundConversation,
       status: "in-progress",
       currentPhase: "lobby",
       phaseTimestamps: {
@@ -59,6 +84,69 @@ export const startInterview = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc   Synthesize interviewer voice with ElevenLabs
+// @route  POST /api/interview/tts
+export const synthesizeInterviewSpeech = async (req, res) => {
+  try {
+    const { text, voiceId } = req.body;
+
+    if (typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ message: "Text is required" });
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+    if (!apiKey) {
+      return res.status(503).json({ message: "ElevenLabs voice is not configured" });
+    }
+
+    const normalizedText = text.replace(/\s+/g, " ").trim().slice(0, 1800);
+    const selectedVoiceId = (voiceId || process.env.ELEVENLABS_VOICE_ID || "EXAVITQu4vr4xnSDxMaL").trim();
+    const modelId = (process.env.ELEVENLABS_MODEL_ID || "eleven_turbo_v2_5").trim();
+
+    const elevenResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg"
+        },
+        body: JSON.stringify({
+          text: normalizedText,
+          model_id: modelId,
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.82,
+            style: 0.35,
+            use_speaker_boost: true
+          }
+        })
+      }
+    );
+
+    if (!elevenResponse.ok) {
+      const details = await elevenResponse.text();
+      return res.status(502).json({
+        message: "Failed to generate ElevenLabs speech",
+        details: details.slice(0, 300)
+      });
+    }
+
+    const audioArrayBuffer = await elevenResponse.arrayBuffer();
+    const audioBuffer = Buffer.from(audioArrayBuffer);
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Length", String(audioBuffer.length));
+
+    return res.status(200).send(audioBuffer);
+  } catch (error) {
+    console.error("ElevenLabs TTS error:", error);
+    return res.status(500).json({ message: "Failed to synthesize interviewer voice" });
   }
 };
 
@@ -92,9 +180,14 @@ export const completeLobby = async (req, res) => {
     await interview.save();
 
     // Generate warm-up greeting
+    const resumeHint = Array.isArray(interview.backgroundConversation)
+      ? interview.backgroundConversation.map((item) => item.question).filter(Boolean).join(" ")
+      : "";
+
     const greeting = await generateWarmUpGreeting({
       interviewerName: interview.interviewerName,
-      company: interview.company
+      company: interview.company,
+      resumeText: resumeHint
     });
 
     res.json({
@@ -184,13 +277,15 @@ export const submitWarmUpResponse = async (req, res) => {
       interview.currentPhase = "background";
       interview.phaseTimestamps.backgroundStarted = new Date();
 
-      // Generate background questions
-      const bgQuestions = await generateBackgroundQuestions();
-      interview.backgroundConversation = bgQuestions.map(q => ({
-        question: q.question,
-        userResponse: "",
-        aiResponse: ""
-      }));
+      // Backward-compatibility for existing interviews that don't have pre-generated background questions
+      if (!Array.isArray(interview.backgroundConversation) || interview.backgroundConversation.length === 0) {
+        const bgQuestions = await generateBackgroundQuestions();
+        interview.backgroundConversation = bgQuestions.map(q => ({
+          question: q.question,
+          userResponse: "",
+          aiResponse: ""
+        }));
+      }
     }
 
     await interview.save();
@@ -282,6 +377,59 @@ export const submitBackgroundResponse = async (req, res) => {
   }
 };
 
+// @desc   Get next appropriate question based on performance
+// @route  POST /api/interview/:id/adaptive-question/:questionIndex
+export const getAdaptiveQuestion = async (req, res) => {
+  try {
+    const interview = await MockInterview.findOne({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
+    if (!interview) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+
+    const idx = Number(req.params.questionIndex);
+    const currentQ = interview.questions[idx];
+
+    if (!currentQ) {
+      return res.status(404).json({ message: "Question not found" });
+    }
+
+    // Calculate average score so far
+    const answeredQuestions = interview.questions.slice(0, idx + 1).filter(q => q.score > 0);
+    const avgScore = answeredQuestions.length > 0
+      ? answeredQuestions.reduce((sum, q) => sum + q.score, 0) / answeredQuestions.length
+      : 5;
+
+    try {
+      const nextQuestion = await generateAdaptiveQuestion({
+        previousScore: currentQ.score,
+        topic: currentQ.questionType || "technical",
+        difficulty: interview.difficulty
+      });
+
+      res.json({
+        nextQuestion: nextQuestion.question,
+        expectedPoints: nextQuestion.expectedPoints,
+        adjustedDifficulty: nextQuestion.difficulty,
+        performanceLevel: avgScore < 4 ? "struggling" : avgScore < 7 ? "moderate" : "strong"
+      });
+    } catch (err) {
+      console.error("Adaptive question generation error:", err);
+      // Return original question
+      res.json({
+        nextQuestion: interview.questions[idx + 1]?.question || "How would you approach this problem?",
+        performanceLevel: "unknown"
+      });
+    }
+
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc   Submit answer to core question
 // @route  PUT /api/interview/:id/answer/:questionIndex
 export const submitAnswer = async (req, res) => {
@@ -309,11 +457,15 @@ export const submitAnswer = async (req, res) => {
     let strengths = [];
     let improvements = [];
     let followUp = null;
+    let interviewerReaction = null;
+    let shouldInterrupt = false;
+    let interruptMessage = null;
 
     const isLast = interview.questions.length - 1 === idx;
+    const answerLength = answer.trim().split(/\s+/).length;
 
     const normalizedAnswer = answer.toLowerCase();
-    const userDoesntKnow = 
+    const userDoesntKnow =
       normalizedAnswer.includes("don't know") ||
       normalizedAnswer.includes("dont know") ||
       normalizedAnswer.includes("no idea") ||
@@ -323,12 +475,27 @@ export const submitAnswer = async (req, res) => {
       normalizedAnswer.includes("no clue") ||
       normalizedAnswer.includes("not familiar");
 
+    const userRequestedNextQuestion =
+      /\b(next question|move on|move ahead|move to next|move to the next|go to next|go to the next|skip question|skip this question|skip the question|pass this question|pass the question|proceed to next|let'?s move on|can we move on)\b/i.test(normalizedAnswer) ||
+      ["next", "skip", "pass", "next please"].includes(normalizedAnswer.trim());
+
     const MAX_FOLLOW_UPS = 1;
-    const shouldAskFollowUp = !userDoesntKnow && answer.length > 30;
+    const tooShortAnswer = answerLength < 10;
+    const resumeHint = Array.isArray(interview.backgroundConversation)
+      ? interview.backgroundConversation
+          .map((item) => `${item.question || ""} ${item.userResponse || ""}`.trim())
+          .filter(Boolean)
+          .join(" ")
+      : "";
 
     try {
-      if (userDoesntKnow) {
-        feedback = "That's completely fine. Not knowing something is part of learning. It's better to be honest than to guess. Let's move to the next question.";
+      if (userRequestedNextQuestion) {
+        feedback = isLast
+          ? "Sure, let's wrap up this interview."
+          : "Sure, let's move to the next question.";
+        score = 0;
+      } else if (userDoesntKnow) {
+        feedback = "That's okay. Let's simplify this and focus on your approach.";
         score = 3;
       } else {
         const evaluation = await evaluateAnswer({
@@ -346,22 +513,70 @@ export const submitAnswer = async (req, res) => {
           score = 5;
         }
 
-        const nextQuestionText = !isLast ? " Let's move to our next question." : " Let's wrap up this interview.";
-        
-        if (!feedback.includes("next question") && !feedback.includes("wrap up")) {
-          feedback = feedback + nextQuestionText;
+        // Smart interruption for overly general answers
+        if (score < 4 && answerLength > 40 && Math.random() > 0.5) {
+          try {
+            const interrupt = await generateInterrupterResponse({
+              question: q.question,
+              userAnswer: answer,
+              interviewerName: interview.interviewerName
+            });
+            interruptMessage = interrupt.interruption;
+            shouldInterrupt = true;
+            // Don't penalize heavily, but acknowledge the interruption
+            score = Math.max(2, score - 1);
+          } catch (err) {
+            console.error("Interrupt generation error:", err);
+          }
         }
+
       }
 
-      if (shouldAskFollowUp && q.followUpCount < MAX_FOLLOW_UPS) {
-        followUp = await generateFollowUp({
-          question: q.question,
-          userAnswer: answer
+      // Generate interviewer reaction
+      try {
+        interviewerReaction = await generateInterviewerReaction({
+          answerQuality: score < 4 ? "weak" : score < 7 ? "okay" : "strong",
+          answerLength: tooShortAnswer ? "too_short" : answerLength > 100 ? "rambling" : "appropriate",
+          isFollowUp: false
         });
+      } catch (err) {
+        console.error("Reaction generation error:", err);
+      }
+
+      // Ask follow-up only when candidate hasn't explicitly requested to move on.
+      if (!userRequestedNextQuestion && q.followUpCount < MAX_FOLLOW_UPS) {
+        try {
+          const probingFollowUp = await generateProbeFollowUp({
+            question: q.question,
+            userAnswer: answer,
+            answerLength,
+            previousScore: score,
+            interviewType: interview.type,
+            difficulty: interview.difficulty,
+            resumeText: resumeHint,
+            previousAnswers: [answer]
+          });
+          followUp = probingFollowUp.followUp;
+        } catch (err) {
+          console.error("Follow-up generation error:", err);
+        }
+
+        if (!followUp) {
+          followUp = score < 4
+            ? "Let's simplify this. What is the first concrete step you would take?"
+            : score >= 7
+              ? "Good. What trade-off would you consider if scale doubled?"
+              : "Why did you choose this approach over alternatives?";
+        }
 
         q.followUpCount = (q.followUpCount || 0) + 1;
         if (!q.followUps) q.followUps = [];
         q.followUps.push(followUp);
+      }
+
+      if (!followUp && !feedback.includes("next question") && !feedback.includes("wrap up") && !shouldInterrupt) {
+        const nextQuestionText = !isLast ? " Let's move to our next question." : " Let's wrap up this interview.";
+        feedback = feedback + nextQuestionText;
       }
 
     } catch (err) {
@@ -386,7 +601,7 @@ export const submitAnswer = async (req, res) => {
 
     const hasMoreFollowUps = q.followUpCount < MAX_FOLLOW_UPS;
 
-    const feedbackText = typeof feedback === 'object' 
+    const feedbackText = typeof feedback === 'object'
       ? `Strengths: ${strengths.join(', ')}. Improvements: ${improvements.join(', ')}. ${feedback}`
       : feedback;
 
@@ -395,8 +610,12 @@ export const submitAnswer = async (req, res) => {
       feedbackObj: typeof feedback === 'object' ? feedback : null,
       score,
       followUp,
+      userRequestedNextQuestion,
       hasMoreFollowUps,
-      isLastQuestion: isLast
+      isLastQuestion: isLast,
+      interviewerReaction,
+      shouldInterrupt,
+      interruptMessage
     });
 
   } catch (error) {
@@ -547,7 +766,9 @@ export const completeInterview = async (req, res) => {
     interview.currentPhase = "completed";
     interview.phaseTimestamps.completedAt = new Date();
 
-    // Generate overall feedback
+    let overallSummary = null;
+
+    // Generate overall feedback summary
     try {
       const feedback = await generateOverallFeedback({
         questions: interview.questions,
@@ -556,7 +777,8 @@ export const completeInterview = async (req, res) => {
         company: interview.company
       });
 
-      interview.overallFeedback = feedback;
+      overallSummary = feedback;
+      interview.overallFeedback = JSON.stringify(feedback);
     } catch (err) {
       console.error("Error generating overall feedback:", err);
     }
@@ -566,7 +788,8 @@ export const completeInterview = async (req, res) => {
     res.json({
       message: "Interview completed",
       interview,
-      overallScore
+      overallScore,
+      overallSummary
     });
 
   } catch (error) {

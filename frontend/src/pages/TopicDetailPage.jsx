@@ -3,6 +3,17 @@ import { useParams } from "react-router-dom";
 import { getTopic, completeTopic, submitQuiz, aiExplain } from "../services/api";
 import { decode } from "html-entities";
 import { toast } from "react-toastify";
+import { formatSubjectName } from "../utils/subjectDisplay";
+
+const borderC = "rgba(99,102,241,0.18)";
+const cardStyle = { background: "rgba(13,17,23,0.82)", border: `1px solid ${borderC}`, borderRadius: 18, backdropFilter: "blur(14px)" };
+
+const tabs = [
+  { id: "content", label: "📖 Content" },
+  { id: "interview", label: "🎤 Interview Q&A" },
+  { id: "quiz", label: "✍️ Practice Quiz" },
+  { id: "ai", label: "🤖 AI Explanation" },
+];
 
 const TopicDetailPage = () => {
   const { subjectName, topicId } = useParams();
@@ -16,160 +27,130 @@ const TopicDetailPage = () => {
   const [completing, setCompleting] = useState(false);
 
   useEffect(() => {
-    getTopic(subjectName, topicId)
-      .then((res) => {
-        setTopic(res.data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error("Failed to load topic");
-        setLoading(false);
-      });
+    getTopic(subjectName, topicId).then(res => { setTopic(res.data); setLoading(false); })
+      .catch(err => { console.error(err); toast.error("Failed to load topic"); setLoading(false); });
   }, [subjectName, topicId]);
 
   const handleCompleteTopic = async () => {
     setCompleting(true);
-    try {
-      await completeTopic(subjectName, topicId, { topicTitle: topic.title });
-      toast.success("Topic marked as completed!");
-    } catch (error) {
-      toast.error("Failed to complete topic");
-    } finally {
-      setCompleting(false);
-    }
+    try { await completeTopic(subjectName, topicId, { topicTitle: topic.title }); toast.success("Topic marked as completed!"); }
+    catch { toast.error("Failed to complete topic"); }
+    finally { setCompleting(false); }
   };
 
   const handleQuizSubmit = async () => {
     if (!topic?.quiz || topic.quiz.length === 0) return;
-    
     const answers = Object.values(quizAnswers);
-    if (answers.length !== topic.quiz.length) {
-      toast.error("Please answer all questions");
-      return;
-    }
-
-    try {
-      const res = await submitQuiz(subjectName, topicId, { answers });
-      setQuizResult(res.data);
-      toast.success(`Quiz completed! Score: ${res.data.score}/${res.data.total}`);
-    } catch (error) {
-      toast.error("Failed to submit quiz");
-    }
+    if (answers.length !== topic.quiz.length) { toast.error("Please answer all questions"); return; }
+    try { const res = await submitQuiz(subjectName, topicId, { answers }); setQuizResult(res.data); toast.success(`Score: ${res.data.score}/${res.data.total}`); }
+    catch { toast.error("Failed to submit quiz"); }
   };
 
   const handleAIExplain = async () => {
     setAiLoading(true);
-    try {
-      const res = await aiExplain({ topic: topic.title, subject: subjectName });
-      setAiExplanation(res.data.explanation);
-    } catch (error) {
-      toast.error("Failed to get AI explanation");
-    } finally {
-      setAiLoading(false);
-    }
+    try { const res = await aiExplain({ topic: topic.title, subject: subjectName }); setAiExplanation(res.data.explanation); }
+    catch { toast.error("Failed to get AI explanation"); }
+    finally { setAiLoading(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 900, margin: "0 auto" }}>
+      <div className="skeleton-loader" style={{ height: 60, borderRadius: 16 }} />
+      <div className="skeleton-loader" style={{ height: 40, borderRadius: 10 }} />
+      <div className="skeleton-loader" style={{ height: 300, borderRadius: 16 }} />
+    </div>
+  );
 
-  if (!topic) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Topic not found</p>
-      </div>
-    );
-  }
+  if (!topic) return <div style={{ textAlign: "center", padding: 48, color: "var(--c-muted)" }}>Topic not found</div>;
 
   const decodedContent = decode(topic.content || "");
-
-  const tabs = [
-    { id: "content", label: "📖 Content" },
-    { id: "interview", label: "🎤 Interview Q&A" },
-    { id: "quiz", label: "✍️ Practice Quiz" },
-    { id: "ai", label: "🤖 AI Explanation" },
-  ];
+  const scoreColor = (r) => r.score / r.total >= 0.7 ? "#10b981" : "#f59e0b";
+  const displaySubjectName = formatSubjectName(decodeURIComponent(subjectName));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{topic.title}</h1>
-          <p className="text-gray-500 mt-1">{subjectName}</p>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 900, color: "#e8edf5", fontFamily: "Outfit,sans-serif", marginBottom: 4 }}>{topic.title}</h1>
+          <p style={{ color: "var(--c-muted)", fontSize: "0.85rem" }}>{displaySubjectName}</p>
         </div>
-        <button
-          onClick={handleCompleteTopic}
-          disabled={completing}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition disabled:opacity-50"
-        >
-          {completing ? "Marking..." : "✓ Mark Complete"}
-        </button>
+        <button onClick={handleCompleteTopic} disabled={completing}
+          style={{
+            padding: "9px 22px", borderRadius: 10, border: "none",
+            background: "linear-gradient(135deg,#10b981,#059669)", color: "white",
+            fontWeight: 700, fontSize: "0.85rem", fontFamily: "Inter,sans-serif",
+            cursor: completing ? "not-allowed" : "pointer",
+            boxShadow: "0 4px 14px rgba(16,185,129,0.35)",
+            opacity: completing ? 0.6 : 1, transition: "all 0.3s",
+          }}
+        >{completing ? "Marking…" : "✓ Mark Complete"}</button>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-3 px-1 border-b-2 font-medium text-sm transition ${
-                activeTab === tab.id
-                  ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${borderC}`, paddingBottom: 0 }}>
+        {tabs.map(tab => {
+          const active = activeTab === tab.id;
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "10px 18px", fontSize: "0.84rem", fontWeight: 700,
+                cursor: "pointer", transition: "all 0.2s", fontFamily: "Inter,sans-serif",
+                background: "transparent", border: "none",
+                color: active ? "#818cf8" : "var(--c-muted)",
+                borderBottom: `2px solid ${active ? "#6366f1" : "transparent"}`,
+                marginBottom: -1,
+              }}
+            >{tab.label}</button>
+          );
+        })}
       </div>
 
-      {/* Tab Content */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        {/* Content Tab */}
+      {/* Content area */}
+      <div style={{ ...cardStyle, padding: "28px 28px" }}>
+
+        {/* ── Content Tab ── */}
         {activeTab === "content" && (
           <div>
             {decodedContent ? (
-              <div
-                className="prose max-w-none"
+              <div style={{ color: "#c8d0df", fontSize: "0.9rem", lineHeight: 1.85 }}
+                className="prose-dark"
                 dangerouslySetInnerHTML={{ __html: decodedContent }}
               />
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <p>No content available for this topic.</p>
-                <p className="mt-2">Use the AI Explanation tab to learn more!</p>
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--c-dim)" }}>
+                <div style={{ fontSize: "2rem", marginBottom: 10 }}>📖</div>
+                <p>No content available. Use the AI Explanation tab to learn more!</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Interview Questions Tab */}
+        {/* ── Interview Q&A Tab ── */}
         {activeTab === "interview" && (
           <div>
-            <h2 className="text-xl font-semibold mb-4">Common Interview Questions</h2>
-            {topic.interviewQuestions && topic.interviewQuestions.length > 0 ? (
-              <div className="space-y-4">
-                {topic.interviewQuestions.map((item, index) => (
-                  <div key={index} className="border rounded-lg p-4 hover:shadow-md transition">
-                    <div className="flex items-start gap-3">
-                      <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-sm font-medium">
-                        Q{index + 1}
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-900">{item.question}</p>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#e8edf5", fontFamily: "Outfit,sans-serif", marginBottom: 16 }}>Common Interview Questions</h2>
+            {topic.interviewQuestions?.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {topic.interviewQuestions.map((item, i) => (
+                  <div key={i} style={{
+                    padding: "16px 18px", borderRadius: 14,
+                    background: "rgba(7,8,15,0.5)", border: `1px solid ${borderC}`,
+                    transition: "all 0.2s",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                      <span style={{
+                        padding: "2px 10px", borderRadius: 8, fontSize: "0.72rem", fontWeight: 800,
+                        background: "rgba(99,102,241,0.12)", color: "#818cf8",
+                        border: "1px solid rgba(99,102,241,0.25)", flexShrink: 0,
+                      }}>Q{i + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontWeight: 600, fontSize: "0.9rem", color: "#e8edf5" }}>{item.question}</p>
                         {item.answer && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-indigo-600 text-sm font-medium">
-                              Show Answer
-                            </summary>
-                            <p className="mt-2 text-gray-600 bg-gray-50 p-3 rounded">
+                          <details style={{ marginTop: 10 }}>
+                            <summary style={{ cursor: "pointer", color: "#818cf8", fontSize: "0.82rem", fontWeight: 600 }}>Show Answer</summary>
+                            <p style={{ marginTop: 8, color: "var(--c-muted)", fontSize: "0.85rem", lineHeight: 1.7, padding: "12px 14px", background: "rgba(99,102,241,0.05)", borderRadius: 10 }}>
                               {item.answer}
                             </p>
                           </details>
@@ -180,151 +161,143 @@ const TopicDetailPage = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-500">
-                <p>No interview questions available for this topic.</p>
-                <p className="mt-2">Use the AI Explanation tab to prepare!</p>
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--c-dim)" }}>
+                <p>No interview questions available. Use the AI Explanation tab to prepare!</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Quiz Tab */}
+        {/* ── Quiz Tab ── */}
         {activeTab === "quiz" && (
           <div>
-            <h2 className="text-xl font-semibold mb-4">Practice Quiz</h2>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#e8edf5", fontFamily: "Outfit,sans-serif", marginBottom: 16 }}>Practice Quiz</h2>
             {quizResult ? (
-              <div className="text-center py-8">
-                <div className={`text-5xl font-bold mb-4 ${
-                  quizResult.score / quizResult.total >= 0.7 ? "text-green-500" : "text-yellow-500"
-                }`}>
-                  {quizResult.score}/{quizResult.total}
+              <div>
+                <div style={{ textAlign: "center", marginBottom: 24 }}>
+                  <div style={{ fontSize: "3rem", fontWeight: 900, color: scoreColor(quizResult), fontFamily: "Outfit,sans-serif" }}>
+                    {quizResult.score}/{quizResult.total}
+                  </div>
+                  <p style={{ color: "var(--c-muted)", marginTop: 6 }}>
+                    {quizResult.score / quizResult.total >= 0.7 ? "Great job! You've mastered this topic!" : "Keep practicing to improve!"}
+                  </p>
                 </div>
-                <p className="text-gray-600 mb-6">
-                  {quizResult.score / quizResult.total >= 0.7 
-                    ? "Great job! You've mastered this topic!" 
-                    : "Keep practicing to improve!"}
-                </p>
-                <div className="text-left space-y-4 max-w-2xl mx-auto">
-                  {quizResult.results.map((result, idx) => (
-                    <div key={idx} className={`p-4 rounded-lg border ${result.isCorrect ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-                      <p className="font-medium">Q{idx + 1}: {result.question}</p>
-                      <p className="text-sm mt-1">
-                        Your answer: <span className={result.isCorrect ? "text-green-600" : "text-red-600"}>
-                          {result.selectedAnswer !== undefined ? result.selectedAnswer : "Not answered"}
-                        </span>
+
+                {/* Results breakdown */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                  {quizResult.results?.map((r, idx) => (
+                    <div key={idx} style={{
+                      padding: "14px 16px", borderRadius: 12,
+                      background: r.isCorrect ? "rgba(16,185,129,0.06)" : "rgba(244,63,94,0.06)",
+                      border: `1px solid ${r.isCorrect ? "rgba(16,185,129,0.2)" : "rgba(244,63,94,0.2)"}`,
+                    }}>
+                      <p style={{ fontWeight: 600, fontSize: "0.88rem", color: "#e8edf5", marginBottom: 4 }}>Q{idx + 1}: {r.question}</p>
+                      <p style={{ fontSize: "0.82rem", color: r.isCorrect ? "#10b981" : "#f43f5e" }}>
+                        Your answer: {r.selectedAnswer !== undefined ? r.selectedAnswer : "Not answered"}
                       </p>
-                      {!result.isCorrect && (
-                        <p className="text-sm text-green-600">
-                          Correct: {result.correctAnswer}
-                        </p>
-                      )}
-                      {result.explanation && (
-                        <p className="text-sm text-gray-600 mt-2">{result.explanation}</p>
-                      )}
+                      {!r.isCorrect && <p style={{ fontSize: "0.82rem", color: "#10b981", marginTop: 2 }}>Correct: {r.correctAnswer}</p>}
+                      {r.explanation && <p style={{ fontSize: "0.8rem", color: "var(--c-muted)", marginTop: 6 }}>{r.explanation}</p>}
                     </div>
                   ))}
                 </div>
-                <button
-                  onClick={() => {
-                    setQuizResult(null);
-                    setQuizAnswers({});
+
+                <button onClick={() => { setQuizResult(null); setQuizAnswers({}); }}
+                  style={{
+                    padding: "11px 24px", borderRadius: 12, border: "none",
+                    background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "white",
+                    fontWeight: 700, fontSize: "0.88rem", fontFamily: "Inter,sans-serif", cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(99,102,241,0.35)",
                   }}
-                  className="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium"
-                >
-                  Try Again
-                </button>
+                >🔄 Try Again</button>
               </div>
-            ) : topic.quiz && topic.quiz.length > 0 ? (
-              <div className="space-y-6">
-                {topic.quiz.map((question, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <p className="font-medium mb-3">
-                      <span className="text-indigo-600 mr-2">Q{index + 1}.</span>
-                      {question.question}
+            ) : topic.quiz?.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {topic.quiz.map((q, i) => (
+                  <div key={i}>
+                    <p style={{ fontWeight: 600, fontSize: "0.9rem", color: "#e8edf5", marginBottom: 10 }}>
+                      <span style={{ color: "#818cf8" }}>Q{i + 1}.</span> {q.question}
                     </p>
-                    <div className="space-y-2">
-                      {question.options.map((option, optIndex) => (
-                        <label
-                          key={optIndex}
-                          className={`flex items-center p-3 rounded-lg border cursor-pointer transition ${
-                            quizAnswers[index] === optIndex
-                              ? "border-indigo-500 bg-indigo-50"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${index}`}
-                            value={optIndex}
-                            checked={quizAnswers[index] === optIndex}
-                            onChange={() => setQuizAnswers({ ...quizAnswers, [index]: optIndex })}
-                            className="mr-3"
-                          />
-                          <span>{option}</span>
-                        </label>
-                      ))}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {q.options.map((opt, j) => {
+                        const sel = quizAnswers[i] === j;
+                        return (
+                          <label key={j} style={{
+                            display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                            borderRadius: 10, cursor: "pointer", transition: "all 0.2s",
+                            background: sel ? "rgba(99,102,241,0.1)" : "rgba(7,8,15,0.4)",
+                            border: `1px solid ${sel ? "rgba(99,102,241,0.35)" : borderC}`,
+                            color: sel ? "#e8edf5" : "var(--c-muted)", fontSize: "0.85rem",
+                          }}>
+                            <input type="radio" name={`question-${i}`} value={j}
+                              checked={sel} onChange={() => setQuizAnswers({ ...quizAnswers, [i]: j })}
+                              style={{ accentColor: "#6366f1" }} />
+                            {opt}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
-                <button
-                  onClick={handleQuizSubmit}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium"
-                >
-                  Submit Quiz
-                </button>
+                <button onClick={handleQuizSubmit}
+                  style={{
+                    padding: "12px", borderRadius: 12, border: "none",
+                    background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "white",
+                    fontWeight: 700, fontSize: "0.9rem", fontFamily: "Inter,sans-serif", cursor: "pointer",
+                    boxShadow: "0 6px 18px rgba(99,102,241,0.35)",
+                  }}
+                >Submit Quiz</button>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-500">
+              <div style={{ textAlign: "center", padding: "40px 0", color: "var(--c-dim)" }}>
                 <p>No quiz questions available for this topic.</p>
-                <p className="mt-2">Add quiz questions via admin panel.</p>
               </div>
             )}
           </div>
         )}
 
-        {/* AI Explanation Tab */}
+        {/* ── AI Tab ── */}
         {activeTab === "ai" && (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">AI-Powered Explanation</h2>
-              <button
-                onClick={handleAIExplain}
-                disabled={aiLoading}
-                className="bg-linear-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg font-medium transition disabled:opacity-50 flex items-center gap-2"
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#e8edf5", fontFamily: "Outfit,sans-serif" }}>AI-Powered Explanation</h2>
+              <button onClick={handleAIExplain} disabled={aiLoading}
+                style={{
+                  padding: "9px 22px", borderRadius: 10, border: "none",
+                  background: aiLoading ? "rgba(139,92,246,0.3)" : "linear-gradient(135deg,#8b5cf6,#6366f1)",
+                  color: "white", fontWeight: 700, fontSize: "0.84rem", fontFamily: "Inter,sans-serif",
+                  cursor: aiLoading ? "not-allowed" : "pointer",
+                  boxShadow: aiLoading ? "none" : "0 4px 14px rgba(139,92,246,0.35)",
+                  display: "flex", alignItems: "center", gap: 8,
+                }}
               >
-                {aiLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    Generating...
-                  </>
-                ) : (
-                  "✨ Get AI Explanation"
-                )}
+                {aiLoading
+                  ? <><span style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", display: "inline-block", animation: "spin 0.75s linear infinite" }} />Generating…</>
+                  : "✨ Get AI Explanation"
+                }
               </button>
             </div>
-            
+
             {aiLoading && (
-              <div className="flex justify-center py-12">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                  <p className="text-gray-500">AI is thinking...</p>
-                </div>
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <div style={{ width: 40, height: 40, border: "3px solid rgba(99,102,241,0.2)", borderTopColor: "#6366f1", borderRadius: "50%", animation: "spin 0.75s linear infinite", margin: "0 auto 14px" }} />
+                <p style={{ color: "var(--c-muted)" }}>AI is thinking…</p>
               </div>
             )}
 
             {aiExplanation && !aiLoading && (
-              <div className="bg-linear-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100">
-                <div className="prose max-w-none">
-                  <p className="whitespace-pre-wrap">{aiExplanation}</p>
-                </div>
+              <div style={{
+                padding: "20px 22px", borderRadius: 14,
+                background: "rgba(99,102,241,0.05)", border: `1px solid ${borderC}`,
+              }}>
+                <p style={{ color: "#c8d0df", fontSize: "0.88rem", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>{aiExplanation}</p>
               </div>
             )}
 
             {!aiExplanation && !aiLoading && (
-              <div className="text-center py-12 text-gray-500">
-                <div className="text-4xl mb-4">🤖</div>
-                <p>Click "Get AI Explanation" to receive a personalized explanation of this topic.</p>
-                <p className="mt-2 text-sm">Powered by Groq AI</p>
+              <div style={{ textAlign: "center", padding: "40px 0" }}>
+                <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>🤖</div>
+                <p style={{ color: "var(--c-muted)", fontSize: "0.88rem" }}>Click "Get AI Explanation" for a personalized explanation.</p>
+                <p style={{ color: "var(--c-dim)", fontSize: "0.78rem", marginTop: 6 }}>Powered by Groq AI</p>
               </div>
             )}
           </div>
@@ -335,4 +308,3 @@ const TopicDetailPage = () => {
 };
 
 export default TopicDetailPage;
-
