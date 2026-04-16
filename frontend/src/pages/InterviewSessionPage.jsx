@@ -289,6 +289,7 @@ const InterviewSessionPage = () => {
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
   const isSpeakingRef = useRef(false);
+  const lastSpokenRef = useRef({ text: "", ts: 0 });
   const selectedVoiceRef = useRef(null);
   const activeAudioRef = useRef(null);
   const audioUrlRef = useRef(null);
@@ -432,17 +433,30 @@ const InterviewSessionPage = () => {
     const spokenText = sanitizeSpeechText(text);
     if (!spokenText || isSpeakingRef.current) return;
 
+    const now = Date.now();
+    const { text: lastText, ts: lastTs } = lastSpokenRef.current;
+    // Ignore accidental duplicate calls for the exact same prompt in a short window.
+    if (lastText === spokenText && now - lastTs < 8000) return;
+    lastSpokenRef.current = { text: spokenText, ts: now };
+
     isSpeakingRef.current = true;
     setAiSpeaking(true);
     if (recognitionRef.current && listening) { try { recognitionRef.current.stop(); } catch (e) {} }
 
+    let completed = false;
+    let fallbackStarted = false;
+
     const finishSpeaking = () => {
+      if (completed) return;
+      completed = true;
       isSpeakingRef.current = false;
       setAiSpeaking(false);
       if (callback) callback();
     };
 
     const fallbackToBrowserTts = () => {
+      if (fallbackStarted) return;
+      fallbackStarted = true;
       stopActiveAudio();
       speakWithBrowserTts(spokenText, finishSpeaking);
     };
@@ -475,14 +489,14 @@ const InterviewSessionPage = () => {
 
       audio.onerror = () => {
         stopActiveAudio();
-        fallbackToBrowserTts();
+        finishSpeaking();
       };
 
       const playPromise = audio.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
           stopActiveAudio();
-          fallbackToBrowserTts();
+          finishSpeaking();
         });
       }
     } catch (error) {
